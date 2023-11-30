@@ -7,7 +7,7 @@ from django.conf.urls.static import static
 urlpatterns = [
     path('uploads/', S3Upload.as_view(), name='file-uploads'),
     path('download/<str:file_name>', DownloadS3File.as_view(), name='file-downlaods'),
-    path('isuploaded/<str:file_name>', IsUploaded.as_view(), name='client-uploaded-or-not')
+    path('isuploaded/', IsUploaded.as_view(), name='client-uploaded-or-not')
 
 ]
 

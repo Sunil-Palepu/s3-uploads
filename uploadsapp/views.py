@@ -9,6 +9,7 @@ from django.core.exceptions import ValidationError
 from datetime import datetime
 from .models import ModelUploads
 from .serializers import UploadSerializer
+from django.utils.text import slugify
 
 
 
@@ -61,7 +62,8 @@ class S3Upload(APIView):
             #validations
             allowed_formats = ['jpeg', 'jpg']
             allowed_size = 50_000 #in kb
-            format = original_name.split('.')[-1].lower()
+            format = original_name.split('.')[-1]
+            name = original_name.split('.')[0]
             
             if format not in allowed_formats:
                 return Response({'error': 'Invalid image format'}, status=status.HTTP_400_BAD_REQUEST)
@@ -72,24 +74,28 @@ class S3Upload(APIView):
 
 
             # Check if the name is already in the database
-            if ModelUploads.objects.filter(file_name=original_name).exists():
-                return Response({'error': 'File name is already in the database'}, status=status.HTTP_400_BAD_REQUEST)
+            # if ModelUploads.objects.filter(file_name=original_name).exists():
+            #     return Response({'error': 'File name is already in the database'}, status=status.HTTP_400_BAD_REQUEST)
             
-            #saving to database
-            instance = ModelUploads(file_name=original_name, file_size=file_size)
-            instance.save()
+            # #saving to database
+            # instance = ModelUploads(file_name=original_name, file_size=file_size)
+            # instance.save()
 
-            # bucket_name = settings.AWS_STORAGE_BUCKET_NAME
-            datetimevalue = datetime.now()
+            
+            current_datetime = datetime.now()
+            formatted_datetime = current_datetime.strftime("%Y%m%d%H%M%S")
 
-            object_key = f'images/{datetimevalue}-{original_name}'
+            
+            name = slugify(name)
+            object_key = 'user-uploads/' + f'{formatted_datetime}-{name}.{format}'
+           
 
             presigned_url = InitializingS3.create_presigned_url(client_method='put_object', object_key=object_key)
      
             if presigned_url:
-                instance.object_key = object_key
-                instance.save()
-                return Response({'presigned_url': presigned_url}, status=status.HTTP_201_CREATED)
+                # instance.object_key = object_key
+                # instance.save()
+                return Response({'presigned_url': presigned_url, 'object_key':object_key}, status=status.HTTP_201_CREATED)
             else:
                 return Response({'error': 'Failed to generate presigned URL'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         except KeyError:
@@ -100,20 +106,19 @@ class S3Upload(APIView):
 
 class IsUploaded(APIView):
     
-    #update the database entity field isuploaded to True
-    def put(self, request, file_name):
+    #update the database with original name and object key
+    def post(self, request):
         try:
-            isuploaded = request.data['isuploaded']
-            if not isuploaded or isuploaded != 'True':
-                return Response({'error': 'value must be True'})
-            print('isuploaded = ', isuploaded)
-            file = ModelUploads.objects.get(file_name=file_name)
-            print('file = ', file)
-            file.is_uploaded = isuploaded
-            file.save()
+            original_name = request.data['file_name']
+            object_key  = request.data['object_key']
+            file_size = request.data['file_size']
+
+            instance = ModelUploads(file_name=original_name, object_key = object_key, file_size = file_size)
+            instance.save()
+
             return Response({'message':'successfully updated the database'})
         except KeyError:
-            return Response({'KeyError':'please provide "isuploaded" parameter in the request'})
+            return Response({'KeyError':'please provide required parameters in the request'})
 
 
 
