@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from .models import ModelUploads
-from django.core.exceptions import ValidationError
+
 
 
 class UploadSerializer(serializers.ModelSerializer):
@@ -22,7 +22,7 @@ class S3UploadSerializer(serializers.Serializer):
         allowed_size = 10_000   #10 mb or 10_000 kb
 
         if extension not in allowed_formats:
-            raise serializers. ('only jpeg and jpg file extentsions are allowed')
+            raise serializers.ValidationError('only jpeg and jpg file extentsions are allowed')
         
         if data.get('file_size') > allowed_size:
             raise serializers.ValidationError(f'file size should be less than {allowed_size} kb')
