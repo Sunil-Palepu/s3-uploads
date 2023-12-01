@@ -5,10 +5,9 @@ from rest_framework.response import Response
 from rest_framework import status
 import boto3
 from botocore.exceptions import ClientError
-from django.core.exceptions import ValidationError
 from datetime import datetime
 from .models import ModelUploads
-from .serializers import UploadSerializer
+from .serializers import UploadSerializer, S3UploadSerializer
 from django.utils.text import slugify
 
 
@@ -50,56 +49,28 @@ class S3Upload(APIView):
     def post(self, request, format=None):
        
         try:
-            original_name = request.data['file_name'].lower()       #value = sportscar.jpeg
-            file_size = request.data['file_size']                   #value = 500
-            print(original_name)
+            #updated validations
+            serializer = S3UploadSerializer(data=request.data)
+            if serializer.is_valid(raise_exception=True):   
+                
+                original_name = serializer.validated_data['original_name']
+                format = original_name.split('.')[-1]
+                name  = original_name.split('.')[0]
+
+                current_datetime = datetime.now()
+                formatted_datetime = current_datetime.strftime("%Y%m%d%H%M%S")
+
+                name = slugify(name)
+                object_key = 'user-uploads/' + f'{formatted_datetime}-{name}.{format}'
             
-            if not original_name:
-                return Response({'error message':'original_name must contain value'})
-            if not file_size:
-                return Response({'error message': 'file size must contain a value'})
-
-            #validations
-            allowed_formats = ['jpeg', 'jpg']
-            allowed_size = 50_000 #in kb
-            format = original_name.split('.')[-1]
-            name = original_name.split('.')[0]
-            
-            if format not in allowed_formats:
-                return Response({'error': 'Invalid image format'}, status=status.HTTP_400_BAD_REQUEST)
-            
-            if int(file_size) > allowed_size:
-                return Response({'error':f'file size less then {allowed_size} kb'}, status=status.HTTP_400_BAD_REQUEST)
-
-
-
-            # Check if the name is already in the database
-            # if ModelUploads.objects.filter(file_name=original_name).exists():
-            #     return Response({'error': 'File name is already in the database'}, status=status.HTTP_400_BAD_REQUEST)
-            
-            # #saving to database
-            # instance = ModelUploads(file_name=original_name, file_size=file_size)
-            # instance.save()
-
-            
-            current_datetime = datetime.now()
-            formatted_datetime = current_datetime.strftime("%Y%m%d%H%M%S")
-
-            
-            name = slugify(name)
-            object_key = 'user-uploads/' + f'{formatted_datetime}-{name}.{format}'
-           
-
-            presigned_url = InitializingS3.create_presigned_url(client_method='put_object', object_key=object_key)
-     
-            if presigned_url:
-                # instance.object_key = object_key
-                # instance.save()
-                return Response({'presigned_url': presigned_url, 'object_key':object_key}, status=status.HTTP_201_CREATED)
-            else:
-                return Response({'error': 'Failed to generate presigned URL'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        except KeyError:
-            return Response({'error': 'Please provide a file_name and filesize  in the request'}, status=status.HTTP_400_BAD_REQUEST)
+                presigned_url = InitializingS3.create_presigned_url(client_method='put_object', object_key=object_key)
+        
+                if presigned_url:
+                    return Response({'presigned_url': presigned_url, 'object_key':object_key}, status=status.HTTP_201_CREATED)
+                else:
+                    return Response({'error': 'Failed to generate presigned URL'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        except Exception as e:
+            return Response({'error': {str(e)}}, status=status.HTTP_400_BAD_REQUEST)
 
       
 
@@ -109,14 +80,14 @@ class IsUploaded(APIView):
     #update the database with original name and object key
     def post(self, request):
         try:
-            original_name = request.data['file_name']
-            object_key  = request.data['object_key']
-            file_size = request.data['file_size']
+            print('request.data= ',request.data)
+            serializer = UploadSerializer(data=request.data)
+            print('serializer = ', serializer)
+            if serializer.is_valid(raise_exception=True):
+                print('hai')
+                serializer.save()   
 
-            instance = ModelUploads(file_name=original_name, object_key = object_key, file_size = file_size)
-            instance.save()
-
-            return Response({'message':'successfully updated the database'})
+                return Response({'message':'successfully updated the database', 'serializer.data': serializer.data})
         except KeyError:
             return Response({'KeyError':'please provide required parameters in the request'})
 
@@ -137,7 +108,7 @@ class DownloadS3File(APIView):
             presigned_url = InitializingS3.create_presigned_url('get_object', object_key)
             
             if presigned_url:
-                return Response({'presigned_url': presigned_url}, status=status.HTTP_200_OK)
+                return Response({'presigned_url_to_download_a_file': presigned_url}, status=status.HTTP_200_OK)
             else:
                 return Response({'error': 'Failed to generate presigned URL'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
             
