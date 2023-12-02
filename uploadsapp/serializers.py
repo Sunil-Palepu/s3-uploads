@@ -21,6 +21,11 @@ class S3UploadSerializer(serializers.Serializer):
         print('extension', extension)
         allowed_size = 10_000   #10 mb or 10_000 kb
 
+        #check weather the original_name is in db.
+        #if it is in db through an error
+        if ModelUploads.objects.filter(file_name=name).exists():
+            raise serializers.ValidationError('There is already a file with that name on our system')
+            
         if extension not in allowed_formats:
             raise serializers.ValidationError('only jpeg and jpg file extentsions are allowed')
         
